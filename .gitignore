@@ -1,0 +1,7 @@
+# Ignore executables
+*.out
+*.exe
+
+#Ignore output files 
+*.ppm
+*.jpg
