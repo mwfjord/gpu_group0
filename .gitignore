@@ -1,7 +1,5 @@
-# Ignore executables
-*.out
-*.exe
-
-#Ignore output files 
-*.ppm
-*.jpg
+cudart
+cudart.o
+out.jpg
+out.ppm
+*.jpeg
