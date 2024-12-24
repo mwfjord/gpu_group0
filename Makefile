@@ -6,6 +6,7 @@ NVCC           = $(CUDA_PATH)/bin/nvcc -ccbin $(HOST_COMPILER)
 #NVCC_DBG       = -g -G
 NVCC_DBG       =
 
+# tested with NVIDIA GeForce RTX 3090
 NVCCFLAGS      = $(NVCC_DBG) -m64
 GENCODE_FLAGS  = -gencode arch=compute_86,code=sm_86
 
@@ -22,9 +23,10 @@ out.ppm: cudart
 	rm -f out.ppm
 	./cudart > out.ppm
 
+# install ImageMagick
 out.jpg: out.ppm
 	rm -f out.jpg
-	ppmtojpeg out.ppm > out.jpg
+	convert out.ppm out.jpg
 
 profile_basic: cudart
 	nvprof ./cudart > out.ppm
