@@ -2,6 +2,9 @@
 *.out
 *.exe
 
-#Ignore output files 
+# Ignore output files 
 *.ppm
 *.jpg
+
+# Ignore build directory
+/build/*
