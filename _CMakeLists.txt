@@ -1,0 +1,76 @@
+# Minimum version of CMake
+cmake_minimum_required(VERSION 3.10)
+
+# Project name
+project(RayTracerCUDA)
+
+# Define custom path for CUDA
+set(CUSTOM_PATH "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5")
+
+# CUDA-specific settings
+set(CUDA_PATH ${CUSTOM_PATH} CACHE PATH "Path to CUDA Toolkit")
+set(CUDA_NVCC_EXECUTABLE "${CUSTOM_PATH}/bin/nvcc.exe")
+
+# Set the C++ compiler to MSVC's cl.exe
+set(CMAKE_CXX_COMPILER "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.35.32215/bin/Hostx64/x64/cl.exe")
+
+# Set the CUDA compiler to nvcc
+set(CMAKE_CUDA_COMPILER ${CUDA_NVCC_EXECUTABLE})
+
+# Pass the -ccbin flag to nvcc to tell it where to find cl.exe
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -ccbin C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.35.32215/bin/Hostx64/x64")
+
+# Debug flags (optional)
+set(NVCC_DBG "")
+
+# Common flags for CUDA
+set(NVCCFLAGS "${NVCC_DBG} -m64")
+set(GENCODE_FLAGS "-gencode arch=compute_60,code=sm_60")
+
+# Define the source and include files
+set(SRCS main.cu)
+set(INCS vec3.h ray.h hitable.h hitable_list.h sphere.h camera.h material.h)
+
+# Add CUDA source files to the project
+add_executable(cudart ${SRCS})
+
+# Explicitly set the linker language to CXX (since it's a mix of C++ and CUDA)
+set_target_properties(cudart PROPERTIES LINKER_LANGUAGE CXX)
+
+# Set the NVCC flags and Gencode flags
+set_target_properties(cudart PROPERTIES
+    CUDA_NVCC_FLAGS "${NVCCFLAGS} ${GENCODE_FLAGS}"
+)
+
+# Ensure all header files are included in the target
+target_include_directories(cudart PRIVATE ${CMAKE_SOURCE_DIR})
+
+# Custom target for generating out.ppm
+add_custom_target(out_ppm
+    COMMAND ${CMAKE_BINARY_DIR}/cudart > out.ppm
+    DEPENDS cudart
+    COMMENT "Generating out.ppm"
+)
+
+# Custom target for profiling (basic)
+add_custom_target(profile_basic
+    COMMAND nvprof ${CMAKE_BINARY_DIR}/cudart > out.ppm
+    DEPENDS cudart
+    COMMENT "Profiling cudart with nvprof"
+)
+
+# Custom target for profiling with metrics
+add_custom_target(profile_metrics
+    COMMAND nvprof --metrics achieved_occupancy,inst_executed,inst_fp_32,inst_fp_64,inst_integer ${CMAKE_BINARY_DIR}/cudart > out.ppm
+    DEPENDS cudart
+    COMMENT "Profiling cudart with nvprof metrics"
+)
+
+# Clean up generated files
+add_custom_target(clean_files
+    COMMAND ${CMAKE_COMMAND} -E remove -f cudart cudart.o out.ppm
+    COMMENT "Cleaning up build artifacts"
+)
+
+# Clear any previous linker flags that might have been set
+set(CMAKE_EXE_LINKER_FLAGS "")
