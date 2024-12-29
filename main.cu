@@ -9,6 +9,14 @@
 #include "camera.h"
 #include "material.h"
 
+#define nx 1200
+#define ny 800
+#define ns 10
+#define tx 8
+#define ty 8
+#define tz 8
+
+
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
 
@@ -70,19 +78,30 @@ __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
     curand_init(1984+pixel_index, 0, 0, &rand_state[pixel_index]);
 }
 
-__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) {
+__global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *rand_state) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
-    if((i >= max_x) || (j >= max_y)) return;
-    int pixel_index = j*max_x + i;
+    int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
+    if((i >= nx) || (j >= ny) || (sample_idx != 0)) return;
+    int pixel_index = j*nx + i;
     curandState local_rand_state = rand_state[pixel_index];
-    vec3 col(0,0,0);
+
+    float coords[3];
+    coords[0] = 0;
+    coords[1] = 0;
+    coords[2] = 0;
+
+    vec3 temp_col(0,0,0);
     for(int s=0; s < ns; s++) {
-        float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
-        float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
+        float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
+        float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
-        col += color(r, world, &local_rand_state);
+        temp_col = color(r, world, &local_rand_state);
+        coords[0] += temp_col.x();
+        coords[1] += temp_col.y();
+        coords[2] += temp_col.z();
     }
+    vec3 col(coords[0],coords[1],coords[2]);
     rand_state[pixel_index] = local_rand_state;
     col /= float(ns);
     col[0] = sqrt(col[0]);
@@ -93,7 +112,7 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
 
 #define RND (curand_uniform(&local_rand_state))
 
-__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera, int nx, int ny, curandState *rand_state) {
+__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera, curandState *rand_state) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         curandState local_rand_state = *rand_state;
         d_list[0] = new sphere(vec3(0,-1000.0,-1), 1000,
@@ -146,11 +165,6 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
 }
 
 int main() {
-    int nx = 1200;
-    int ny = 800;
-    int ns = 10;
-    int tx = 8;
-    int ty = 8;
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
@@ -181,7 +195,7 @@ int main() {
     checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
     camera **d_camera;
     checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
-    create_world<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
+    create_world<<<1,1>>>(d_list, d_world, d_camera, d_rand_state2);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -191,9 +205,12 @@ int main() {
     dim3 blocks(nx/tx+1,ny/ty+1);
     dim3 threads(tx,ty);
     render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
+    std::cerr << "Initialization done \n";
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
+    blocks.z =  1;  //ns/tz + 1;
+    threads.z = ns; //tz;
+    render<<<blocks, threads>>>(fb, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     stop = clock();
