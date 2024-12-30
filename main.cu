@@ -11,7 +11,7 @@
 
 #define nx 1200
 #define ny 800
-#define ns 10
+#define ns 1
 #define tx 8
 #define ty 8
 #define tz 8
@@ -82,38 +82,29 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
-    if((i >= nx) || (j >= ny) || (sample_idx != 0)) return;
+    if((i >= nx) || (j >= ny) || (sample_idx >= ns)) return;
     int pixel_index = j*nx + i;
     curandState local_rand_state = rand_state[pixel_index];
 
-    float coords[3];
+    extern __shared__ vec3 coords[];
     if(sample_idx == 0){
-        coords[0] = 0;
-        coords[1] = 0;
-        coords[2] = 0;
+        coords[threadIdx.y * blockDim.x + threadIdx.x] = vec3(0,0,0);
     }
     __syncthreads();
 
-    vec3 temp_col(0,0,0);
     for(int s=0; s < ns; s++) {
     //if(sample_idx < ns){
         float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
         float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
-        temp_col = color(r, world, &local_rand_state);
-        coords[0] += temp_col.r();
-        coords[1] += temp_col.g();
-        coords[2] += temp_col.b();
-        //atomicAdd(&coords[0],temp_col.r());
-        //atomicAdd(&coords[1],temp_col.g());
-        //atomicAdd(&coords[2],temp_col.b());
+        coords[threadIdx.y * blockDim.x + threadIdx.x] += color(r, world, &local_rand_state);
     }
 
     //Add cols from different blocks together in global variable
 
     __syncthreads();
     if(sample_idx == 0){
-        vec3 col(coords[0],coords[1],coords[2]);
+        vec3 col = coords[threadIdx.y * blockDim.x + threadIdx.x];
         rand_state[pixel_index] = local_rand_state;
         col /= float(ns);
         col[0] = sqrt(col[0]);
@@ -226,7 +217,8 @@ int main() {
 
     std::cerr << threads.x << " | " << threads.y << " | " << threads.z << std::endl;
 
-    render<<<blocks, threads>>>(fb, d_camera, d_world, d_rand_state);
+    int smemSize = sizeof(vec3) * threads.y * threads.x;
+    render<<<blocks, threads, smemSize>>>(fb, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     stop = clock();
