@@ -87,27 +87,40 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     curandState local_rand_state = rand_state[pixel_index];
 
     float coords[3];
-    coords[0] = 0;
-    coords[1] = 0;
-    coords[2] = 0;
+    if(sample_idx == 0){
+        coords[0] = 0;
+        coords[1] = 0;
+        coords[2] = 0;
+    }
+    __syncthreads();
 
     vec3 temp_col(0,0,0);
     for(int s=0; s < ns; s++) {
+    //if(sample_idx < ns){
         float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
         float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
         temp_col = color(r, world, &local_rand_state);
-        coords[0] += temp_col.x();
-        coords[1] += temp_col.y();
-        coords[2] += temp_col.z();
+        coords[0] += temp_col.r();
+        coords[1] += temp_col.g();
+        coords[2] += temp_col.b();
+        //atomicAdd(&coords[0],temp_col.r());
+        //atomicAdd(&coords[1],temp_col.g());
+        //atomicAdd(&coords[2],temp_col.b());
     }
-    vec3 col(coords[0],coords[1],coords[2]);
-    rand_state[pixel_index] = local_rand_state;
-    col /= float(ns);
-    col[0] = sqrt(col[0]);
-    col[1] = sqrt(col[1]);
-    col[2] = sqrt(col[2]);
-    fb[pixel_index] = col;
+
+    //Add cols from different blocks together in global variable
+
+    __syncthreads();
+    if(sample_idx == 0){
+        vec3 col(coords[0],coords[1],coords[2]);
+        rand_state[pixel_index] = local_rand_state;
+        col /= float(ns);
+        col[0] = sqrt(col[0]);
+        col[1] = sqrt(col[1]);
+        col[2] = sqrt(col[2]);
+        fb[pixel_index] = col;
+    }
 }
 
 #define RND (curand_uniform(&local_rand_state))
@@ -210,6 +223,9 @@ int main() {
     checkCudaErrors(cudaDeviceSynchronize());
     blocks.z =  1;  //ns/tz + 1;
     threads.z = ns; //tz;
+
+    std::cerr << threads.x << " | " << threads.y << " | " << threads.z << std::endl;
+
     render<<<blocks, threads>>>(fb, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
