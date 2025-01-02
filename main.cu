@@ -11,7 +11,7 @@
 
 #define nx 1200
 #define ny 800
-#define ns 10
+#define ns 3
 #define tx 8
 #define ty 8
 #define tz 8
@@ -66,16 +66,18 @@ __global__ void rand_init(curandState *rand_state) {
     }
 }
 
-__global__ void render_init(int max_x, int max_y, curandState *rand_state) {
+__global__ void render_init(curandState *rand_state) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
-    if((i >= max_x) || (j >= max_y)) return;
-    int pixel_index = j*max_x + i;
+    int sample = threadIdx.z + blockIdx.z * blockDim.z; //sample added
+    if(i >= nx || j >= ny || sample >= ns) return;
+    int pixel_index = j*nx + i;
     // Original: Each thread gets same seed, a different sequence number, no offset
     // curand_init(1984, pixel_index, 0, &rand_state[pixel_index]);
     // BUGFIX, see Issue#2: Each thread gets different seed, same sequence for
     // performance improvement of about 2x!
-    curand_init(1984+pixel_index, 0, 0, &rand_state[pixel_index]);
+    int seed = 1984 + pixel_index + sample;
+    curand_init(seed, pixel_index+ sample, 0, &rand_state[pixel_index * ns + sample]);
 }
 
 __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *rand_state) {
@@ -84,13 +86,12 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
     if((i >= nx) || (j >= ny) || (sample_idx >= ns)) return;
     int pixel_index = j*nx + i;
-    curandState local_rand_state = rand_state[pixel_index];
+    curandState local_rand_state = rand_state[pixel_index * ns + sample_idx];
 
 
-    float random_list[ns];
-    for (int i = 0; i <= sample_idx; i++) {
+    for (int i = 0; i <= sample_idx +1; i++) {
         // Generate a random number using the curandState
-        random_list[i] = curand_uniform(&local_rand_state);
+        curand_uniform(&local_rand_state);
     }
 
     int color_idx = threadIdx.y * blockDim.x + threadIdx.x;
@@ -101,27 +102,24 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     }
     __syncthreads();
 
-    vec3 temp_color(0,0,0);
-    //for(int s=0; s < ns; s++) {
-        float u = float(i + random_list[sample_idx]) / float(nx);
-        float v = float(j + random_list[sample_idx]) / float(ny);
-        ray r = (*cam)->get_ray(u, v, &local_rand_state);
-        //Does same thing, just to be sure
-        colors[threadIdx.y * blockDim.x + threadIdx.x] += color(r, world, &local_rand_state);
-    //}
+    //vec3 temp_color(0,0,0);
 
+    float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
+    float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
+    ray r = (*cam)->get_ray(u, v, &local_rand_state);
+    colors[color_idx] += color(r, world, &local_rand_state);
     //Add cols from different blocks together in global variable
 
-    __syncthreads();
-    if(sample_idx == 0){
+    if(sample_idx != 0) return;
+
+        __syncthreads();
         vec3 col = colors[color_idx];
-        rand_state[pixel_index] = local_rand_state;
-        col /= float(ns);
+        rand_state[pixel_index * ns + sample_idx] = local_rand_state; //redundant?
+        col /= float(min(blockDim.z,ns));
         col[0] = sqrt(col[0]);
         col[1] = sqrt(col[1]);
         col[2] = sqrt(col[2]);
-        fb[pixel_index] = col;
-    }
+        fb[pixel_index] += col;
 }
 
 #define RND (curand_uniform(&local_rand_state))
@@ -189,10 +187,11 @@ int main() {
     // allocate FB
     vec3 *fb;
     checkCudaErrors(cudaMallocManaged((void **)&fb, fb_size));
+    checkCudaErrors(cudaMemset(fb, 0, fb_size)); //Initialize everything to 0
 
     // allocate random state
     curandState *d_rand_state;
-    checkCudaErrors(cudaMalloc((void **)&d_rand_state, num_pixels * sizeof(curandState)));
+    checkCudaErrors(cudaMalloc((void **)&d_rand_state, ns * num_pixels * sizeof(curandState))); // ns added
     curandState *d_rand_state2;
     checkCudaErrors(cudaMalloc((void **)&d_rand_state2, 1*sizeof(curandState)));
 
@@ -218,12 +217,12 @@ int main() {
     // Render our buffer
     dim3 blocks(nx/tx+1,ny/ty+1);
     dim3 threads(tx,ty);
-    render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
+    render_init<<<blocks, threads>>>(d_rand_state);
     std::cerr << "Initialization done \n";
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    blocks.z =  1;  //ns/tz + 1;
-    threads.z = ns; //tz;
+    blocks.z =  ns/tz + 1;
+    threads.z = tz;
 
     std::cerr << threads.x << " | " << threads.y << " | " << threads.z << std::endl;
     std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
