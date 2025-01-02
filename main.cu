@@ -11,7 +11,7 @@
 
 #define nx 1200
 #define ny 800
-#define ns 1
+#define ns 10
 #define tx 8
 #define ty 8
 #define tz 8
@@ -86,25 +86,35 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     int pixel_index = j*nx + i;
     curandState local_rand_state = rand_state[pixel_index];
 
-    extern __shared__ vec3 coords[];
+
+    float random_list[ns];
+    for (int i = 0; i <= sample_idx; i++) {
+        // Generate a random number using the curandState
+        random_list[i] = curand_uniform(&local_rand_state);
+    }
+
+    int color_idx = threadIdx.y * blockDim.x + threadIdx.x;
+
+    extern __shared__ vec3 colors[];
     if(sample_idx == 0){
-        coords[threadIdx.y * blockDim.x + threadIdx.x] = vec3(0,0,0);
+        colors[color_idx] = vec3(0,0,0);
     }
     __syncthreads();
 
-    for(int s=0; s < ns; s++) {
-    //if(sample_idx < ns){
-        float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
-        float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
+    vec3 temp_color(0,0,0);
+    //for(int s=0; s < ns; s++) {
+        float u = float(i + random_list[sample_idx]) / float(nx);
+        float v = float(j + random_list[sample_idx]) / float(ny);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
-        coords[threadIdx.y * blockDim.x + threadIdx.x] += color(r, world, &local_rand_state);
-    }
+        //Does same thing, just to be sure
+        colors[threadIdx.y * blockDim.x + threadIdx.x] += color(r, world, &local_rand_state);
+    //}
 
     //Add cols from different blocks together in global variable
 
     __syncthreads();
     if(sample_idx == 0){
-        vec3 col = coords[threadIdx.y * blockDim.x + threadIdx.x];
+        vec3 col = colors[color_idx];
         rand_state[pixel_index] = local_rand_state;
         col /= float(ns);
         col[0] = sqrt(col[0]);
@@ -182,7 +192,7 @@ int main() {
 
     // allocate random state
     curandState *d_rand_state;
-    checkCudaErrors(cudaMalloc((void **)&d_rand_state, num_pixels*sizeof(curandState)));
+    checkCudaErrors(cudaMalloc((void **)&d_rand_state, num_pixels * sizeof(curandState)));
     curandState *d_rand_state2;
     checkCudaErrors(cudaMalloc((void **)&d_rand_state2, 1*sizeof(curandState)));
 
@@ -216,6 +226,7 @@ int main() {
     threads.z = ns; //tz;
 
     std::cerr << threads.x << " | " << threads.y << " | " << threads.z << std::endl;
+    std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
 
     int smemSize = sizeof(vec3) * threads.y * threads.x;
     render<<<blocks, threads, smemSize>>>(fb, d_camera, d_world, d_rand_state);
