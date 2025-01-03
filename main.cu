@@ -11,11 +11,10 @@
 
 #define nx 1200
 #define ny 800
-#define ns 100
-#define tx 8
-#define ty 8
-#define tz 8
-
+#define ns 10
+#define tx 4
+#define ty 4
+#define tz 60
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
@@ -76,8 +75,8 @@ __global__ void render_init(curandState *rand_state) {
     // curand_init(1984, pixel_index, 0, &rand_state[pixel_index]);
     // BUGFIX, see Issue#2: Each thread gets different seed, same sequence for
     // performance improvement of about 2x!
-    int seed = 1984 + pixel_index + sample;
-    curand_init(seed, pixel_index+ sample, 0, &rand_state[pixel_index * ns + sample]);
+    int seed = 1984 + pixel_index * 1000000 + sample * 10000000000;
+    curand_init(seed, 0, 0,&rand_state[pixel_index * ns + sample]);
 }
 
 __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *rand_state) {
@@ -85,42 +84,54 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
     if((i >= nx) || (j >= ny) || (sample_idx >= ns)) return;
-    int pixel_index = j*nx + i;
-    curandState local_rand_state = rand_state[pixel_index * ns + sample_idx];
+    int pixel = j*nx + i;
+    curandState local_rand_state = rand_state[pixel * ns + sample_idx];
 
+    int idx_in_block = threadIdx.y * blockDim.x + threadIdx.x;
 
-    for (int i = 0; i <= sample_idx +1; i++) {
-        // Generate a random number using the curandState
-        curand_uniform(&local_rand_state);
-    }
-
-    int color_idx = threadIdx.y * blockDim.x + threadIdx.x;
-
-    extern __shared__ vec3 colors[];
-    if(sample_idx == 0){
-        colors[color_idx] = vec3(0,0,0);
-    }
+    extern __shared__ vec3 pixels[];
+    //global_pixels[pixel] = vec3(0,0,0);
+    pixels[idx_in_block] = vec3(0,0,0); //One or all can do this, doesn't matter
     __syncthreads();
-
-    //vec3 temp_color(0,0,0);
 
     float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
     float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
     ray r = (*cam)->get_ray(u, v, &local_rand_state);
-    colors[color_idx] += color(r, world, &local_rand_state);
+    pixels[idx_in_block] += color(r, world, &local_rand_state);
     //Add cols from different blocks together in global variable
 
     if(sample_idx != 0) return;
 
-        __syncthreads();
-        vec3 col = colors[color_idx];
-        rand_state[pixel_index * ns + sample_idx] = local_rand_state; //redundant?
-        col /= float(min(blockDim.z,ns));
-        col[0] = sqrt(col[0]);
-        col[1] = sqrt(col[1]);
-        col[2] = sqrt(col[2]);
-        fb[pixel_index] += col;
+    __syncthreads();
+    vec3 col  = pixels[idx_in_block];
+
+    col /= float(min(blockDim.z,ns)); //Unsure if this should be slihtly different
+    col[0] = sqrt(col[0]);
+    col[1] = sqrt(col[1]);
+    col[2] = sqrt(col[2]);
+    fb[pixel] += col;
+
+
+    //global_pixels[pixel] += pixels[pixel];
 }
+
+/*
+__global__ void process_pixels(vec3 *fb, vec3 *global_pixels){
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+    int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
+    if((i >= nx) || (j >= ny) || (sample_idx >= ns)) return;
+    int pixel = j*nx + i;
+
+    vec3 col  = global_pixels[pixel];
+
+    col /= float(min(blockDim.z,ns)); //Unsure if this should be slihtly different
+    col[0] = sqrt(col[0]);
+    col[1] = sqrt(col[1]);
+    col[2] = sqrt(col[2]);
+    fb[pixel] += col;
+}
+*/
 
 #define RND (curand_uniform(&local_rand_state))
 
@@ -226,9 +237,18 @@ int main() {
     std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
 
     int smemSize = sizeof(vec3) * threads.y * threads.x;
+    //vec3* global_pixels;
+    //int global_pixels_size = nx * ny * sizeof(vec3);
+    //checkCudaErrors(cudaMalloc((void **)&global_pixels, global_pixels_size ));
+
     render<<<blocks, threads, smemSize>>>(fb, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
+
+    //process_pixels<<<blocks, threads>>>(fb, global_pixels);
+    //checkCudaErrors(cudaGetLastError());
+    //checkCudaErrors(cudaDeviceSynchronize());
+
     stop = clock();
     double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
     std::cerr << "took " << timer_seconds << " seconds.\n";
