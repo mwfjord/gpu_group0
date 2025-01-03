@@ -11,7 +11,7 @@
 
 #define nx 1200
 #define ny 800
-#define ns 3
+#define ns 100
 #define tx 8
 #define ty 8
 #define tz 8
@@ -215,14 +215,12 @@ int main() {
     clock_t start, stop;
     start = clock();
     // Render our buffer
-    dim3 blocks(nx/tx+1,ny/ty+1);
-    dim3 threads(tx,ty);
+    dim3 blocks(nx/tx+1,ny/ty+1,ns/tz + 1);
+    dim3 threads(tx,ty,tz);
     render_init<<<blocks, threads>>>(d_rand_state);
     std::cerr << "Initialization done \n";
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    blocks.z =  ns/tz + 1;
-    threads.z = tz;
 
     std::cerr << threads.x << " | " << threads.y << " | " << threads.z << std::endl;
     std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
