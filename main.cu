@@ -12,9 +12,9 @@
 #define nx 1200
 #define ny 800
 #define ns 10
-#define tx 4
-#define ty 4
-#define tz 60
+#define tx 8
+#define ty 8
+#define tz 2
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
@@ -90,7 +90,6 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     int idx_in_block = threadIdx.y * blockDim.x + threadIdx.x;
 
     extern __shared__ vec3 pixels[];
-    //global_pixels[pixel] = vec3(0,0,0);
     pixels[idx_in_block] = vec3(0,0,0); //One or all can do this, doesn't matter
     __syncthreads();
 
@@ -103,35 +102,28 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     if(sample_idx != 0) return;
 
     __syncthreads();
-    vec3 col  = pixels[idx_in_block];
-
-    col /= float(min(blockDim.z,ns)); //Unsure if this should be slihtly different
-    col[0] = sqrt(col[0]);
-    col[1] = sqrt(col[1]);
-    col[2] = sqrt(col[2]);
-    fb[pixel] += col;
-
-
-    //global_pixels[pixel] += pixels[pixel];
+    fb[pixel] += (pixels[idx_in_block]);
 }
 
-/*
-__global__ void process_pixels(vec3 *fb, vec3 *global_pixels){
+
+__global__ void process_pixels(vec3 *fb){
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
-    int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
-    if((i >= nx) || (j >= ny) || (sample_idx >= ns)) return;
+    if((i >= nx) || (j >= ny)) return;
     int pixel = j*nx + i;
 
-    vec3 col  = global_pixels[pixel];
+    vec3 col  = fb[pixel];
+    //Average the color
+    col /= float(ns);
 
-    col /= float(min(blockDim.z,ns)); //Unsure if this should be slihtly different
+    //Apply gamma correction
     col[0] = sqrt(col[0]);
     col[1] = sqrt(col[1]);
     col[2] = sqrt(col[2]);
-    fb[pixel] += col;
+
+    //Write back to fb
+    fb[pixel] = col;
 }
-*/
 
 #define RND (curand_uniform(&local_rand_state))
 
@@ -237,17 +229,15 @@ int main() {
     std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
 
     int smemSize = sizeof(vec3) * threads.y * threads.x;
-    //vec3* global_pixels;
-    //int global_pixels_size = nx * ny * sizeof(vec3);
-    //checkCudaErrors(cudaMalloc((void **)&global_pixels, global_pixels_size ));
-
     render<<<blocks, threads, smemSize>>>(fb, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
-    //process_pixels<<<blocks, threads>>>(fb, global_pixels);
-    //checkCudaErrors(cudaGetLastError());
-    //checkCudaErrors(cudaDeviceSynchronize());
+    blocks.z = 1;
+    threads.z = 1;
+    process_pixels<<<blocks, threads>>>(fb);
+    checkCudaErrors(cudaGetLastError());
+    checkCudaErrors(cudaDeviceSynchronize());
 
     stop = clock();
     double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
