@@ -34,7 +34,6 @@ public:
     inline float squared_length() const { return e[0]*e[0] + e[1]*e[1] + e[2]*e[2]; }
     inline void make_unit_vector();
     
-    
     float e[3];
 };
 
@@ -85,6 +84,30 @@ inline vec3 operator*(const vec3 &v, float t) {
 
 inline float dot(const vec3 &v1, const vec3 &v2) {
     return v1.e[0] *v2.e[0] + v1.e[1] *v2.e[1]  + v1.e[2] *v2.e[2];
+}
+
+inline float dot(const vec3 &v1, const vec3 &v2, cublasHandle_t handle) {
+    float result;
+    float* d_v1;
+    float* d_v2;
+    float* d_result;
+
+    cudaMalloc((void**)&d_v1, 3 * sizeof(float));
+    cudaMalloc((void**)&d_v2, 3 * sizeof(float));
+    cudaMalloc((void**)&d_result, sizeof(float));
+
+    cudaMemcpy(d_v1, v1.e, 3 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_v2, v2.e, 3 * sizeof(float), cudaMemcpyHostToDevice);
+
+    cublasSdot(handle, 3, d_v1, 1, d_v2, 1, d_result);
+
+    cudaMemcpy(&result, d_result, sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_v1);
+    cudaFree(d_v2);
+    cudaFree(d_result);
+
+    return result;
 }
 
 inline vec3 cross(const vec3 &v1, const vec3 &v2) {

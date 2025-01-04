@@ -1,4 +1,6 @@
 #include <iostream>
+#include <fstream>
+#include <cublas_v2.h>
 #include "sphere.h"
 #include "hitable_list.h"
 #include "float.h"
@@ -7,14 +9,15 @@
 #include "random_utils.h"
 
 #define MAXFLOAT FLT_MAX
+# define M_PI           3.14159265358979323846  /* pi */
 
-vec3 color(const ray& r, hitable *world, int depth) {
+vec3 color(const ray& r, hitable *world, int depth, cublasHandle_t handle) {
     hit_record rec;
-    if (world->hit(r, 0.001, MAXFLOAT, rec)) {
+    if (world->hit(r, 0.001, MAXFLOAT, rec, handle)) {
         ray scattered;
         vec3 attenuation;
         if (depth < 50 && rec.mat_ptr->scatter(r, rec, attenuation, scattered)) {
-             return attenuation*color(scattered, world, depth+1);
+             return attenuation*color(scattered, world, depth+1, handle);
         }
         else {
             return vec3(0,0,0);
@@ -27,7 +30,32 @@ vec3 color(const ray& r, hitable *world, int depth) {
     }
 }
 
-hitable *random_scene() {
+void raytrace(int nx, int ny, int ns, hitable *world, camera &cam, cublasHandle_t handle, vec3 *image) {
+    
+    printf("Raytracing Start!\n");
+    
+    for (int j = ny-1; j >= 0; j--) {
+        for (int i = 0; i < nx; i++) {
+            vec3 col(0, 0, 0);
+            for (int s = 0; s < ns; s++) {
+                float u = float(i + random_double()) / float(nx);
+                float v = float(j + random_double()) / float(ny);
+                ray r = cam.get_ray(u, v);
+                vec3 p = r.point_at_parameter(2.0);
+                col += color(r, world, 0, handle);
+            }
+            col /= float(ns);
+            col = vec3(sqrt(col[0]), sqrt(col[1]), sqrt(col[2]));
+            image[j * nx + i] = col;
+
+            printf("Iterating...\n");
+        }
+    }
+
+    printf("Raytracing Done!\n");
+}
+
+hitable *random_scene(cublasHandle_t handle) {
     int n = 500;
     hitable **list = new hitable*[n+1];
     list[0] =  new sphere(vec3(0,-1000,0), 1000, new lambertian(vec3(0.5, 0.5, 0.5)));
@@ -58,11 +86,32 @@ hitable *random_scene() {
     return new hitable_list(list,i);
 }
 
+void write_image(int nx, int ny, vec3 *image, const std::string &filename) {
+    std::ofstream out(filename);
+    out << "P3\n" << nx << " " << ny << "\n255\n";
+    for (int j = ny-1; j >= 0; j--) {
+        for (int i = 0; i < nx; i++) {
+            vec3 col = image[j * nx + i];
+            int ir = int(255.99 * col[0]);
+            int ig = int(255.99 * col[1]);
+            int ib = int(255.99 * col[2]);
+            out << ir << " " << ig << " " << ib << "\n";
+        }
+    }
+    out.close();
+}
+
 int main() {
+    // initialize cuBLAS
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+
     int nx = 1200;
     int ny = 800;
     int ns = 10;
-    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    // create reference for image
+    vec3 *image = new vec3[nx * ny];
+
     hitable *list[5];
     float R = cos(M_PI/4);
     list[0] = new sphere(vec3(0,0,-1), 0.5, new lambertian(vec3(0.1, 0.2, 0.5)));
@@ -71,7 +120,7 @@ int main() {
     list[3] = new sphere(vec3(-1,0,-1), 0.5, new dielectric(1.5));
     list[4] = new sphere(vec3(-1,0,-1), -0.45, new dielectric(1.5));
     hitable *world = new hitable_list(list,5);
-    world = random_scene();
+    world = random_scene(handle);
 
     vec3 lookfrom(13,2,3);
     vec3 lookat(0,0,0);
@@ -80,22 +129,9 @@ int main() {
 
     camera cam(lookfrom, lookat, vec3(0,1,0), 20, float(nx)/float(ny), aperture, dist_to_focus);
 
-    for (int j = ny-1; j >= 0; j--) {
-        for (int i = 0; i < nx; i++) {
-            vec3 col(0, 0, 0);
-            for (int s=0; s < ns; s++) {
-                float u = float(i + random_double()) / float(nx);
-                float v = float(j + random_double()) / float(ny);
-                ray r = cam.get_ray(u, v);
-                vec3 p = r.point_at_parameter(2.0);
-                col += color(r, world,0);
-            }
-            col /= float(ns);
-            col = vec3( sqrt(col[0]), sqrt(col[1]), sqrt(col[2]) );
-            int ir = int(255.99*col[0]);
-            int ig = int(255.99*col[1]);
-            int ib = int(255.99*col[2]);
-            std::cout << ir << " " << ig << " " << ib << "\n";
-        }
-    }
+    raytrace(nx, ny, ns, world, cam, handle, image);
+    write_image(nx, ny, image, "output.ppm");
+
+    // Destroy cuBLAS handle
+    cublasDestroy(handle);
 }
