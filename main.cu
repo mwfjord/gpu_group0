@@ -2,6 +2,14 @@
 #include <time.h>
 #include <float.h>
 #include <curand_kernel.h>
+#include <thrust/random.h>
+#include <thrust/device_ptr.h>
+#include <thrust/device_malloc.h>
+#include <thrust/device_free.h>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/transform.h>
+#include <thrust/functional.h>
 #include "vec3.h"
 #include "ray.h"
 #include "sphere.h"
@@ -154,46 +162,48 @@ int main() {
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
-
+    clock_t start, stop;
+    start = clock();
     int num_pixels = nx*ny;
     size_t fb_size = num_pixels*sizeof(vec3);
 
     // allocate FB
-    vec3 *fb;
-    checkCudaErrors(cudaMallocManaged((void **)&fb, fb_size));
-
+    thrust::device_ptr<vec3> fb = thrust::device_malloc<vec3>(fb_size);
+    
     // allocate random state
-    curandState *d_rand_state;
-    checkCudaErrors(cudaMalloc((void **)&d_rand_state, num_pixels*sizeof(curandState)));
-    curandState *d_rand_state2;
-    checkCudaErrors(cudaMalloc((void **)&d_rand_state2, 1*sizeof(curandState)));
+    thrust::device_ptr<curandState> d_rand_state = thrust::device_malloc<curandState>(fb_size);
+    thrust::device_ptr<curandState> d_rand_state2 = thrust::device_malloc<curandState>(1);
 
     // we need that 2nd random state to be initialized for the world creation
-    rand_init<<<1,1>>>(d_rand_state2);
+    rand_init<<<1,1>>>(thrust::raw_pointer_cast(d_rand_state2));
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
     // make our world of hitables & the camera
-    hitable **d_list;
-    int num_hitables = 22*22+1+3;
-    checkCudaErrors(cudaMalloc((void **)&d_list, num_hitables*sizeof(hitable *)));
-    hitable **d_world;
-    checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
-    camera **d_camera;
-    checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
-    create_world<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
+    thrust::device_ptr<hitable *> d_world = thrust::device_malloc<hitable *>(1);
+    thrust::device_ptr<hitable *> d_list = thrust::device_malloc<hitable *>(22*22+1+3);
+    thrust::device_ptr<camera *> d_camera = thrust::device_malloc<camera *>(1);
+    create_world<<<1,1>>>(
+        thrust::raw_pointer_cast(d_list), 
+        thrust::raw_pointer_cast(d_world), 
+        thrust::raw_pointer_cast(d_camera), 
+        nx, ny, 
+        thrust::raw_pointer_cast(d_rand_state2));
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
-    clock_t start, stop;
-    start = clock();
     // Render our buffer
     dim3 blocks(nx/tx+1,ny/ty+1);
     dim3 threads(tx,ty);
-    render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
+    render_init<<<blocks, threads>>>(nx, ny, thrust::raw_pointer_cast(d_rand_state));
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
+    render<<<blocks, threads>>>(
+        thrust::raw_pointer_cast(fb) , 
+        nx, ny,  ns, 
+        thrust::raw_pointer_cast(d_camera),
+        thrust::raw_pointer_cast(d_world),
+        thrust::raw_pointer_cast(d_rand_state));
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     stop = clock();
@@ -205,23 +215,30 @@ int main() {
     for (int j = ny-1; j >= 0; j--) {
         for (int i = 0; i < nx; i++) {
             size_t pixel_index = j*nx + i;
-            int ir = int(255.99*fb[pixel_index].r());
-            int ig = int(255.99*fb[pixel_index].g());
-            int ib = int(255.99*fb[pixel_index].b());
+            thrust::device_reference<vec3> pix_ref = fb[pixel_index];
+            vec3 pix = pix_ref;
+            int ir = int(255.99*pix.r());
+            int ig = int(255.99*pix.g());
+            int ib = int(255.99*pix.b());
             std::cout << ir << " " << ig << " " << ib << "\n";
         }
     }
 
     // clean up
     checkCudaErrors(cudaDeviceSynchronize());
-    free_world<<<1,1>>>(d_list,d_world,d_camera);
+    free_world<<<1,1>>>(
+        thrust::raw_pointer_cast(d_list),
+        thrust::raw_pointer_cast(d_world),
+        thrust::raw_pointer_cast(d_camera)
+    );
     checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaFree(d_camera));
-    checkCudaErrors(cudaFree(d_world));
-    checkCudaErrors(cudaFree(d_list));
-    checkCudaErrors(cudaFree(d_rand_state));
-    checkCudaErrors(cudaFree(d_rand_state2));
-    checkCudaErrors(cudaFree(fb));
+    thrust::device_free(d_camera);
+    thrust::device_free(d_world);
+    thrust::device_free(d_list);
+    thrust::device_free(d_rand_state);
+    thrust::device_free(d_rand_state2);
+    thrust::device_free(fb);
+
 
     cudaDeviceReset();
 }
