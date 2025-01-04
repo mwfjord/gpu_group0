@@ -7,17 +7,17 @@ class sphere: public hitable  {
     public:
         sphere() {}
         sphere(vec3 cen, float r, material *m) : center(cen), radius(r), mat_ptr(m)  {};
-        virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec, cublasHandle_t handle) const;
+        virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec, cublasHandle_t handle, float* d_v1, float* d_v2) const;
         vec3 center;
         float radius;
         material *mat_ptr;
 };
 
-bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec, cublasHandle_t handle) const {
+bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec, cublasHandle_t handle, float* d_v1, float* d_v2) const {
     vec3 oc = r.origin() - center;
-    float a = dot(r.direction(), r.direction());
-    float b = dot(oc, r.direction());
-    float c = dot(oc, oc) - radius*radius;
+    float a = dot(r.direction(), r.direction(), handle, d_v1, d_v2);
+    float b = dot(oc, r.direction(), handle, d_v1, d_v2);
+    float c = dot(oc, oc, handle, d_v1, d_v2) - radius*radius;
     float discriminant = b*b - a*c;
     if (discriminant > 0) {
         float temp = (-b - sqrt(discriminant))/a;
@@ -42,6 +42,3 @@ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec, cublas
 
 
 #endif
-
-
-

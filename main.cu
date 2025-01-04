@@ -11,13 +11,13 @@
 #define MAXFLOAT FLT_MAX
 # define M_PI           3.14159265358979323846  /* pi */
 
-vec3 color(const ray& r, hitable *world, int depth, cublasHandle_t handle) {
+vec3 color(const ray& r, hitable *world, int depth, cublasHandle_t handle, float* d_v1, float* d_v2) {
     hit_record rec;
-    if (world->hit(r, 0.001, MAXFLOAT, rec, handle)) {
+    if (world->hit(r, 0.001, MAXFLOAT, rec, handle, d_v1, d_v2)) {
         ray scattered;
         vec3 attenuation;
         if (depth < 50 && rec.mat_ptr->scatter(r, rec, attenuation, scattered)) {
-             return attenuation*color(scattered, world, depth+1, handle);
+             return attenuation*color(scattered, world, depth+1, handle, d_v1, d_v2);
         }
         else {
             return vec3(0,0,0);
@@ -30,7 +30,7 @@ vec3 color(const ray& r, hitable *world, int depth, cublasHandle_t handle) {
     }
 }
 
-void raytrace(int nx, int ny, int ns, hitable *world, camera &cam, cublasHandle_t handle, vec3 *image) {
+void raytrace(int nx, int ny, int ns, hitable *world, camera &cam, cublasHandle_t handle, float* d_v1, float* d_v2, vec3 *image) {
     
     printf("Raytracing Start!\n");
     
@@ -42,7 +42,7 @@ void raytrace(int nx, int ny, int ns, hitable *world, camera &cam, cublasHandle_
                 float v = float(j + random_double()) / float(ny);
                 ray r = cam.get_ray(u, v);
                 vec3 p = r.point_at_parameter(2.0);
-                col += color(r, world, 0, handle);
+                col += color(r, world, 0, handle, d_v1, d_v2);
             }
             col /= float(ns);
             col = vec3(sqrt(col[0]), sqrt(col[1]), sqrt(col[2]));
@@ -127,11 +127,23 @@ int main() {
     float dist_to_focus = 10.0;
     float aperture = 0.1;
 
+    // allocate device memory for dot product
+    float* d_v1;
+    float* d_v2;
+    cudaMalloc((void**)&d_v1, 3 * sizeof(float));
+    cudaMalloc((void**)&d_v2, 3 * sizeof(float));
+
     camera cam(lookfrom, lookat, vec3(0,1,0), 20, float(nx)/float(ny), aperture, dist_to_focus);
 
-    raytrace(nx, ny, ns, world, cam, handle, image);
+    raytrace(nx, ny, ns, world, cam, handle, d_v1, d_v2, image);
     write_image(nx, ny, image, "output.ppm");
 
-    // Destroy cuBLAS handle
+    // free device memory
+    cudaFree(d_v1);
+    cudaFree(d_v2);
+
+    delete[] image;
+
+    // destroy cuBLAS handle
     cublasDestroy(handle);
 }
