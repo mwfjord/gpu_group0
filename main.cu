@@ -11,10 +11,10 @@
 
 #define nx 1200
 #define ny 800
-#define ns 10
-#define tx 8
-#define ty 8
-#define tz 2
+#define ns 200
+#define tx 4
+#define ty 4
+#define tz 16
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
@@ -99,7 +99,7 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     pixels[idx_in_block] += color(r, world, &local_rand_state);
     //Add cols from different blocks together in global variable
 
-    if(sample_idx != 0) return;
+    if(threadIdx.z != 0) return;
 
     __syncthreads();
     fb[pixel] += (pixels[idx_in_block]);
