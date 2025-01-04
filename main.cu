@@ -6,10 +6,8 @@
 #include <thrust/device_ptr.h>
 #include <thrust/device_malloc.h>
 #include <thrust/device_free.h>
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
+#include <thrust/universal_vector.h>
 #include <thrust/transform.h>
-#include <thrust/functional.h>
 #include "vec3.h"
 #include "ray.h"
 #include "sphere.h"
@@ -167,13 +165,14 @@ int main() {
     int ns = 10;
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel \n";
-    clock_t start, stop;
-    start = clock();
+    
     int num_pixels = nx*ny;
     size_t fb_size = num_pixels*sizeof(vec3);
 
     // allocate FB
-    thrust::device_vector<vec3> fb(num_pixels);
+    // thrust::device_vector<vec3> fb(num_pixels);
+    // use unified memory instead
+    thrust::universal_vector<vec3> fb(num_pixels);
     thrust::counting_iterator<int> begin(0);
     thrust::counting_iterator<int> end(num_pixels);
     
@@ -198,7 +197,9 @@ int main() {
         thrust::raw_pointer_cast(d_rand_state2));
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-
+    
+    clock_t start, stop;
+    start = clock();
     // Render our buffer
     thrust::for_each(
         thrust::make_counting_iterator(0),
@@ -226,11 +227,9 @@ int main() {
     for (int j = ny-1; j >= 0; j--) {
         for (int i = 0; i < nx; i++) {
             size_t pixel_index = j*nx + i;
-            thrust::device_reference<vec3> pix_ref = fb[pixel_index];
-            vec3 pix = pix_ref;
-            int ir = int(255.99*pix.r());
-            int ig = int(255.99*pix.g());
-            int ib = int(255.99*pix.b());
+            int ir = int(255.99*fb[pixel_index].r());
+            int ig = int(255.99*fb[pixel_index].g());
+            int ib = int(255.99*fb[pixel_index].b());
             std::cout << ir << " " << ig << " " << ib << "\n";
         }
     }
