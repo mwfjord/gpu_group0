@@ -66,15 +66,19 @@ __global__ void rand_init(curandState *rand_state) {
     }
 }
 
-__global__ void render_init(int nx, int ny, curandState *rand_state) {
-    const int i = threadIdx.x + blockIdx.x * blockDim.x;
-    const int j = threadIdx.y + blockIdx.y * blockDim.y;
-    if ((i >= nx) || (j >= ny)) {
-        return;
+struct RenderInitFunctor {
+    int nx, ny;
+    curandState *rand_state;
+
+    __device__ void operator()(int i) {
+        int x = i % nx;
+        int y = i / nx;
+        if (x < nx && y < ny) {
+            curand_init(1984, i, 0, &rand_state[i]);
+        }
     }
-    const int pixel_index = j * nx + i;
-    curand_init(1984, pixel_index, 0, &rand_state[pixel_index]);
-}
+};
+
 struct RenderFunctor {
     hitable **world;
     camera **cam;
@@ -161,11 +165,8 @@ int main() {
     int nx = 1200;
     int ny = 800;
     int ns = 10;
-    int tx = 8;
-    int ty = 8;
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel \n";
-    std::cerr << "in " << tx << "x" << ty << " blocks.\n";
     clock_t start, stop;
     start = clock();
     int num_pixels = nx*ny;
@@ -199,9 +200,11 @@ int main() {
     checkCudaErrors(cudaDeviceSynchronize());
 
     // Render our buffer
-    dim3 blocks(nx/8+1,ny/8+1);
-    dim3 threads(8,8);
-    render_init<<<blocks, threads>>>(nx, ny, thrust::raw_pointer_cast(d_rand_state));
+    thrust::for_each(
+        thrust::make_counting_iterator(0),
+        thrust::make_counting_iterator(nx * ny),
+        RenderInitFunctor{nx, ny, thrust::raw_pointer_cast(d_rand_state)}
+    );
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -211,7 +214,7 @@ int main() {
         thrust::raw_pointer_cast(d_rand_state),
         nx, ny, ns
     });
-    
+
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     stop = clock();
