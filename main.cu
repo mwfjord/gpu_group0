@@ -9,6 +9,8 @@
 #include "camera.h"
 #include "material.h"
 
+#include <cub/cub.cuh>
+
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
 
@@ -89,6 +91,38 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
     col[1] = sqrt(col[1]);
     col[2] = sqrt(col[2]);
     fb[pixel_index] = col;
+}
+
+__global__ void render_cub(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) {
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+    if((i >= max_x) || (j >= max_y)) return;
+    int pixel_index = j*max_x + i;
+    curandState local_rand_state = rand_state[pixel_index];
+
+    // allocate shared memory for CUB
+    typedef cub::BlockReduce<vec3, 256> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    vec3 col(0,0,0);
+    for(int s=0; s < ns; s++) {
+        float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
+        float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
+        ray r = (*cam)->get_ray(u, v, &local_rand_state);
+        col += color(r, world, &local_rand_state);
+    }
+    
+    // perform reduction using CUB
+    col = BlockReduce(temp_storage).Sum(col);
+
+    // only one thread writes the result
+    if (threadIdx.x == 0) {
+        col /= float(ns);
+        col[0] = sqrt(col[0]);
+        col[1] = sqrt(col[1]);
+        col[2] = sqrt(col[2]);
+        fb[pixel_index] = col;
+    }
 }
 
 #define RND (curand_uniform(&local_rand_state))
@@ -193,7 +227,7 @@ int main() {
     render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
+    render_cub<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     stop = clock();

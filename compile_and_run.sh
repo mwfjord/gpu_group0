@@ -20,6 +20,8 @@ fi
 
 echo "Compilation successful. Executable: $OUTPUT_EXE"
 
+exit 0
+
 # step 2: run the executable and collect output in a .ppm file
 echo "Running executable and saving output to $OUTPUT_PPM"
 ./$OUTPUT_EXE > $OUTPUT_PPM
