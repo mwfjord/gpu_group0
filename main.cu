@@ -151,10 +151,14 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
     delete *d_camera;
 }
 
-int main() {
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        printf("Usage: %s <input sample size>\n", argv[0]);
+        exit(1);
+    }
     int nx = 1200;
     int ny = 800;
-    int ns = 10;
+    int ns = atoi(argv[1]);
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel \n";
     
