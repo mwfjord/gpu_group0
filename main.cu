@@ -86,8 +86,6 @@ struct RenderFunctor {
     __device__ vec3 operator()(int i) {
         int x = i % nx;
         int y = i / nx;
-        thrust::default_random_engine rng(1984+i);
-        thrust::uniform_real_distribution<float> u01(0, 1);
         const int pixel_index = y*nx + x;
         curandState local_rand_state = rand_state[pixel_index];
         vec3 col(0,0,0);
@@ -169,13 +167,6 @@ int main() {
     int num_pixels = nx*ny;
     size_t fb_size = num_pixels*sizeof(vec3);
 
-    // allocate FB
-    // thrust::device_vector<vec3> fb(num_pixels);
-    // use unified memory instead
-    thrust::universal_vector<vec3> fb(num_pixels);
-    thrust::counting_iterator<int> begin(0);
-    thrust::counting_iterator<int> end(num_pixels);
-    
     // allocate random state
     thrust::device_ptr<curandState> d_rand_state = thrust::device_malloc<curandState>(fb_size);
     thrust::device_ptr<curandState> d_rand_state2 = thrust::device_malloc<curandState>(1);
@@ -200,6 +191,12 @@ int main() {
     
     clock_t start, stop;
     start = clock();
+    
+    // allocate FB
+    thrust::universal_vector<vec3> fb(num_pixels);
+    thrust::counting_iterator<int> begin(0);
+    thrust::counting_iterator<int> end(num_pixels);
+
     // Render our buffer
     thrust::for_each(
         thrust::make_counting_iterator(0),
