@@ -198,13 +198,13 @@ int main(int argc, char **argv) {
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     
-    clock_t start, stop;
-    start = clock();
-    
     // allocate FB
     thrust::universal_vector<vec3> fb(num_pixels);
     thrust::counting_iterator<int> begin(0);
     thrust::counting_iterator<int> end(num_pixels);
+
+    clock_t start, stop;
+    start = clock();
 
     // Render our buffer
     thrust::for_each(
