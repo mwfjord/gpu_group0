@@ -1,0 +1,7 @@
+{
+  "cmake.sourceDirectory": "/home/marcus/OptiX/SDK",
+  "files.associations": {
+    "*.pl": "prolog",
+    "new": "cpp"
+  }
+}
