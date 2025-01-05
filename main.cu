@@ -11,7 +11,6 @@
 
 #define nx 1200
 #define ny 800
-#define ns 200
 #define tx 4
 #define ty 4
 #define tz 16
@@ -65,7 +64,7 @@ __global__ void rand_init(curandState *rand_state) {
     }
 }
 
-__global__ void render_init(curandState *rand_state) {
+__global__ void render_init(curandState *rand_state, int ns) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     int sample = threadIdx.z + blockIdx.z * blockDim.z; //sample added
@@ -79,7 +78,7 @@ __global__ void render_init(curandState *rand_state) {
     curand_init(seed, 0, 0,&rand_state[pixel_index * ns + sample]);
 }
 
-__global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *rand_state) {
+__global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *rand_state, int ns) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
@@ -106,7 +105,7 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
 }
 
 
-__global__ void process_pixels(vec3 *fb){
+__global__ void process_pixels(vec3 *fb, int ns){
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if((i >= nx) || (j >= ny)) return;
@@ -179,10 +178,26 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
     delete *d_camera;
 }
 
-int main() {
+int main(int argc, char **argv) {
+    int verbose = 0;
+    int ns = 10;
+    if(argc >= 3){
+        verbose = atoi(argv[2]);
+    }
 
-    std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
-    std::cerr << "in " << tx << "x" << ty << " blocks.\n";
+    
+    if(argc >= 2){
+        ns = atoi(argv[1]);
+    } else {
+        if(verbose){
+            std::cerr << "Default ns used \n";
+        }
+    }
+
+    if(verbose){
+        std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
+        std::cerr << "in " << tx << "x" << ty << " blocks.\n";
+    }
 
     int num_pixels = nx*ny;
     size_t fb_size = num_pixels*sizeof(vec3);
@@ -220,22 +235,24 @@ int main() {
     // Render our buffer
     dim3 blocks(nx/tx+1,ny/ty+1,ns/tz + 1);
     dim3 threads(tx,ty,tz);
-    render_init<<<blocks, threads>>>(d_rand_state);
-    std::cerr << "Initialization done \n";
+    render_init<<<blocks, threads>>>(d_rand_state, ns);
+    if(verbose) std::cerr << "Initialization done \n";
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
-    std::cerr << threads.x << " | " << threads.y << " | " << threads.z << std::endl;
-    std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
+    if(verbose){
+        std::cerr << threads.x << " | " << threads.y << " | " << threads.z << std::endl;
+        std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
+    }
 
     int smemSize = sizeof(vec3) * threads.y * threads.x;
-    render<<<blocks, threads, smemSize>>>(fb, d_camera, d_world, d_rand_state);
+    render<<<blocks, threads, smemSize>>>(fb, d_camera, d_world, d_rand_state, ns);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
     blocks.z = 1;
     threads.z = 1;
-    process_pixels<<<blocks, threads>>>(fb);
+    process_pixels<<<blocks, threads>>>(fb, ns);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
