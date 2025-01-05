@@ -197,9 +197,6 @@ int main() {
         thrust::make_counting_iterator(nx * ny),
         RenderInitFunctor{thrust::raw_pointer_cast(d_rand_state)}
     );
-    checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaDeviceSynchronize());
-
     thrust::transform(begin, end, fb.begin(), RenderFunctor{
         thrust::raw_pointer_cast(d_world),
         thrust::raw_pointer_cast(d_camera),
