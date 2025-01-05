@@ -65,7 +65,6 @@ __global__ void rand_init(curandState *rand_state) {
 }
 
 struct RenderInitFunctor {
-    int nx, ny;
     curandState *rand_state;
 
     __device__ void operator()(int i) {
@@ -196,7 +195,7 @@ int main() {
     thrust::for_each(
         thrust::make_counting_iterator(0),
         thrust::make_counting_iterator(nx * ny),
-        RenderInitFunctor{nx, ny, thrust::raw_pointer_cast(d_rand_state)}
+        RenderInitFunctor{thrust::raw_pointer_cast(d_rand_state)}
     );
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
