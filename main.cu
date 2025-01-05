@@ -152,15 +152,26 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        printf("Usage: %s <input sample size>\n", argv[0]);
-        exit(1);
-    }
     int nx = 1200;
     int ny = 800;
-    int ns = atoi(argv[1]);
+    
+    int verbose = 0;
+    int ns = 10;
+    if(argc >= 3){
+        verbose = atoi(argv[2]);
+    }
 
-    std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel \n";
+    if(argc >= 2){
+        ns = atoi(argv[1]);
+    } else {
+        if(verbose){
+            std::cerr << "Default ns used \n";
+        }
+    }
+
+    if(verbose){
+        std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel \n";
+    }
     
     int num_pixels = nx*ny;
     size_t fb_size = num_pixels*sizeof(vec3);
