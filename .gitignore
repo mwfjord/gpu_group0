@@ -5,3 +5,7 @@
 #Ignore output files 
 *.ppm
 *.jpg
+*.png
+
+#Ignore build files
+optix_owl_version/build/

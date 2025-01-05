@@ -24,7 +24,7 @@
 // external helper stuff for image output
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
-
+#include <curand_kernel.h>
 #include <random>
 
 #define LOG(message)                                            \
@@ -38,8 +38,8 @@
 
 extern "C" char deviceCode_ptx[];
 
-const char *outFileName = "s05-rtow.png";
-const vec2i fbSize(1600,800);
+const char *outFileName = "output.png";
+const vec2i fbSize(1200,800);
 const vec3f lookFrom(13, 2, 3);
 const vec3f lookAt(0, 0, 0);
 const vec3f lookUp(0.f,1.f,0.f);
@@ -91,6 +91,9 @@ int main(int ac, char **av)
   // ##################################################################
   // pre-owl host-side set-up
   // ##################################################################
+
+  
+
 
   LOG("owl example '" << av[0] << "' starting up");
 
