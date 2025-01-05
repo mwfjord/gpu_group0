@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <time.h>
 #include <cublas_v2.h>
 #include "sphere.h"
 #include "hitable_list.h"
@@ -31,9 +32,6 @@ vec3 color(const ray& r, hitable *world, int depth, cublasHandle_t handle, float
 }
 
 void raytrace(int nx, int ny, int ns, hitable *world, camera &cam, cublasHandle_t handle, float* d_v1, float* d_v2, vec3 *image) {
-    
-    printf("Raytracing Start!\n");
-    
     for (int j = ny-1; j >= 0; j--) {
         for (int i = 0; i < nx; i++) {
             vec3 col(0, 0, 0);
@@ -47,12 +45,8 @@ void raytrace(int nx, int ny, int ns, hitable *world, camera &cam, cublasHandle_
             col /= float(ns);
             col = vec3(sqrt(col[0]), sqrt(col[1]), sqrt(col[2]));
             image[j * nx + i] = col;
-
-            printf("Iterating...\n");
         }
     }
-
-    printf("Raytracing Done!\n");
 }
 
 hitable *random_scene(cublasHandle_t handle) {
@@ -112,6 +106,8 @@ int main() {
     // create reference for image
     vec3 *image = new vec3[nx * ny];
 
+    std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
+
     hitable *list[5];
     float R = cos(M_PI/4);
     list[0] = new sphere(vec3(0,0,-1), 0.5, new lambertian(vec3(0.1, 0.2, 0.5)));
@@ -127,15 +123,26 @@ int main() {
     float dist_to_focus = 10.0;
     float aperture = 0.1;
 
+    camera cam(lookfrom, lookat, vec3(0,1,0), 20, float(nx)/float(ny), aperture, dist_to_focus);
+
+    // start timer after scene preparation
+    clock_t start, stop;
+    start = clock();
+
     // allocate device memory for dot product
     float* d_v1;
     float* d_v2;
     cudaMalloc((void**)&d_v1, 3 * sizeof(float));
     cudaMalloc((void**)&d_v2, 3 * sizeof(float));
 
-    camera cam(lookfrom, lookat, vec3(0,1,0), 20, float(nx)/float(ny), aperture, dist_to_focus);
 
     raytrace(nx, ny, ns, world, cam, handle, d_v1, d_v2, image);
+
+    // stop timer to get time
+    stop = clock();
+    double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
+    std::cerr << "took " << timer_seconds << " seconds.\n";
+
     write_image(nx, ny, image, "output.ppm");
 
     // free device memory
