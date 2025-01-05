@@ -1,10 +1,11 @@
 #include <iostream>
+#include <time.h>
 #include "sphere.h"
 #include "hitable_list.h"
 #include "float.h"
 #include "camera.h"
 #include "material.h"
-#include "random_utils.h"
+#include "random_utils.cpp"
 
 #define MAXFLOAT FLT_MAX
 
@@ -95,6 +96,12 @@ int main(int argc, char *argv[]){
 
     camera cam(lookfrom, lookat, vec3(0,1,0), 20, float(nx)/float(ny), aperture, dist_to_focus);
 
+
+    vec3 *image = new vec3[nx * ny];
+
+    clock_t start, stop;
+    start = clock();
+
     for (int j = ny-1; j >= 0; j--) {
         for (int i = 0; i < nx; i++) {
             vec3 col(0, 0, 0);
@@ -107,6 +114,24 @@ int main(int argc, char *argv[]){
             }
             col /= float(ns);
             col = vec3( sqrt(col[0]), sqrt(col[1]), sqrt(col[2]) );
+            image[j * nx + i] = col;
+
+            int ir = int(255.99*col[0]);
+            int ig = int(255.99*col[1]);
+            int ib = int(255.99*col[2]);
+            std::cout << ir << " " << ig << " " << ib << "\n";
+        }
+    }
+
+    
+    stop = clock();
+    double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
+    std::cerr << "took " << timer_seconds << " seconds.\n";
+
+    for (int j = ny-1; j >= 0; j--) {
+        for (int i = 0; i < nx; i++) {
+            vec3 col = image[j * nx + i];
+
             int ir = int(255.99*col[0]);
             int ig = int(255.99*col[1]);
             int ib = int(255.99*col[2]);

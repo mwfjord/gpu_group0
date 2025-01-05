@@ -6,6 +6,7 @@ rt
 # Ignore output files 
 *.ppm
 *.jpg
+*.log
 
 # Ignore build directory
 /build/*

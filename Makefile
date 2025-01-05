@@ -1,5 +1,5 @@
 CXX = g++
-rt: main.cc camera.h hitable.h hitable_list.h material.h ray.h sphere.h vec3.h
+rt: main.cc camera.h hitable.h hitable_list.h material.h ray.h sphere.h vec3.h random_utils.h random_utils.cpp
 	$(CXX) -O3 -o rt main.cc
 out.ppm: rt
 	rm -f out.ppm
