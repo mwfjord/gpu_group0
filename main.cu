@@ -69,11 +69,7 @@ struct RenderInitFunctor {
     curandState *rand_state;
 
     __device__ void operator()(int i) {
-        int x = i % nx;
-        int y = i / nx;
-        if (x < nx && y < ny) {
-            curand_init(1984, i, 0, &rand_state[i]);
-        }
+        curand_init(1984, i, 0, &rand_state[i]);
     }
 };
 
@@ -86,8 +82,7 @@ struct RenderFunctor {
     __device__ vec3 operator()(int i) {
         int x = i % nx;
         int y = i / nx;
-        const int pixel_index = y*nx + x;
-        curandState local_rand_state = rand_state[pixel_index];
+        curandState local_rand_state = rand_state[i];
         vec3 col(0,0,0);
         for(int s=0; s < ns; s++) {
             float u = float(x + curand_uniform(&local_rand_state)) / float(nx);
