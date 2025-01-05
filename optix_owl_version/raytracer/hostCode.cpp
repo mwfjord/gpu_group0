@@ -26,6 +26,9 @@
 #include "stb/stb_image_write.h"
 #include <curand_kernel.h>
 #include <random>
+#include <iostream>
+#include <time.h>
+
 
 #define LOG(message)                                            \
   std::cout << OWL_TERMINAL_BLUE;                               \
@@ -306,6 +309,8 @@ int main(int ac, char **av)
   // ##################################################################
   // now that everything is ready: launch it ....
   // ##################################################################
+  clock_t start, stop;
+  start = clock();
 
   LOG("launching ...");
   owlRayGenLaunch2D(rayGen,fbSize.x,fbSize.y);
@@ -317,6 +322,9 @@ int main(int ac, char **av)
   stbi_write_png(outFileName,fbSize.x,fbSize.y,4,
                  fb,fbSize.x*sizeof(uint32_t));
   LOG_OK("written rendered frame buffer to file "<<outFileName);
+  stop = clock();
+  double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
+  std::cerr << timer_seconds << std::endl;
 
   // ##################################################################
   // and finally, clean up
