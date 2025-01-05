@@ -58,10 +58,25 @@ hitable *random_scene() {
     return new hitable_list(list,i);
 }
 
-int main() {
+int main(int argc, char *argv[]){
     int nx = 1200;
     int ny = 800;
+    
+    int verbose = 0;
     int ns = 10;
+    if(argc >= 3){
+        verbose = atoi(argv[2]);
+    }
+
+    
+    if(argc >= 2){
+        ns = atoi(argv[1]);
+    } else {
+        if(verbose){
+            std::cerr << "Default ns used \n";
+        }
+    }
+
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
     hitable *list[5];
     float R = cos(M_PI/4);

@@ -1,6 +1,7 @@
 # Ignore executables
 *.out
 *.exe
+rt
 
 # Ignore output files 
 *.ppm

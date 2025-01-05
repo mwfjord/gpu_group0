@@ -1,0 +1,2 @@
+SPP = 2
+runner.sh: line 24: ./rt: No such file or directory
