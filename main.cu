@@ -8,12 +8,13 @@
 #include "hitable_list.h"
 #include "camera.h"
 #include "material.h"
+#include <cub/cub.cuh>
 
 #define nx 1200
 #define ny 800
-#define tx 4
-#define ty 4
-#define tz 16
+#define tx 1
+#define ty 1
+#define tz 50
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
@@ -86,22 +87,28 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     int pixel = j*nx + i;
     curandState local_rand_state = rand_state[pixel * ns + sample_idx];
 
-    int idx_in_block = threadIdx.y * blockDim.x + threadIdx.x;
+    using BlockReduce = cub::BlockReduce<vec3, tz>;
+    using TempStorage = typename BlockReduce::TempStorage;
+    __shared__ TempStorage temp_storage;
+    BlockReduce block_reduce{temp_storage};
 
-    extern __shared__ vec3 pixels[];
-    pixels[idx_in_block] = vec3(0,0,0); //One or all can do this, doesn't matter
+    __shared__ vec3 pixel_val;
+    pixel_val = vec3(0,0,0); //One or all can do this, doesn't matter
     __syncthreads();
+
 
     float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
     float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
     ray r = (*cam)->get_ray(u, v, &local_rand_state);
-    pixels[idx_in_block] += color(r, world, &local_rand_state);
+    pixel_val += color(r, world, &local_rand_state);
+    //pixel_val = block_reduce.Sum(color(r, world, &local_rand_state));
+
     //Add cols from different blocks together in global variable
 
-    if(threadIdx.z != 0) return;
+    if (threadIdx.z != 0) return;
 
     __syncthreads();
-    fb[pixel] += (pixels[idx_in_block]);
+    fb[pixel] += pixel_val;
 }
 
 
