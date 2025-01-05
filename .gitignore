@@ -3,16 +3,14 @@
 *.exe
 *.exp
 *.lib
+cudart
+cudart.o
 
 # Ignore output files 
 *.ppm
 *.jpg
 *.jpeg
+*.log
 
 # Ignore build directory
 /build/*
-
-# Custom ignore
-# TODO: Check if necessary
-cudart
-cudart.o
