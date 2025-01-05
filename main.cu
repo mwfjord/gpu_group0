@@ -95,18 +95,34 @@ void write_image(int nx, int ny, vec3 *image, const std::string &filename) {
     out.close();
 }
 
-int main() {
+int main(int argc, char **argv) {
     // initialize cuBLAS
     cublasHandle_t handle;
     cublasCreate(&handle);
 
     int nx = 1200;
     int ny = 800;
+    
+    int verbose = 0;
     int ns = 10;
+    if(argc >= 3){
+        verbose = atoi(argv[2]);
+    }
+
+    
+    if(argc >= 2){
+        ns = atoi(argv[1]);
+    } else {
+        if(verbose){
+            std::cerr << "Default ns used \n";
+        }
+    }
+
+
     // create reference for image
     vec3 *image = new vec3[nx * ny];
 
-    std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
+    if(verbose) std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
 
     hitable *list[5];
     float R = cos(M_PI/4);
