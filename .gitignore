@@ -9,3 +9,5 @@
 
 #Ignore build files
 optix_owl_version/build/
+results.csv
+optix_benchmarking.ipynb

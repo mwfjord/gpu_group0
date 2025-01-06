@@ -324,7 +324,7 @@ int main(int ac, char **av)
   LOG_OK("written rendered frame buffer to file "<<outFileName);
   stop = clock();
   double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
-  std::cerr << timer_seconds << std::endl;
+  std::cerr << "runtime: " << timer_seconds << std::endl;
 
   // ##################################################################
   // and finally, clean up
