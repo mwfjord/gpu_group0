@@ -75,7 +75,7 @@ __global__ void render_init(curandState *rand_state, int ns) {
     // curand_init(1984, pixel_index, 0, &rand_state[pixel_index]);
     // BUGFIX, see Issue#2: Each thread gets different seed, same sequence for
     // performance improvement of about 2x!
-    int seed = 1984 + pixel_index * 1000000 + sample * 100000;
+    int seed = 1984 + pixel_index * 1000000 + sample * 10000000000;
     curand_init(seed, 0, 0,&rand_state[pixel_index * ns + sample]);
 }
 
@@ -83,7 +83,9 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     int sample_idx = threadIdx.z + blockIdx.z * blockDim.z;
+
     if((i >= nx) || (j >= ny) || (sample_idx >= ns)) return;
+
     int pixel = j*nx + i;
     curandState local_rand_state = rand_state[pixel * ns + sample_idx];
 
@@ -92,7 +94,7 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     __shared__ TempStorage temp_storage;
     BlockReduce block_reduce{temp_storage};
 
-    __shared__ vec3 pixel_val;
+    vec3 pixel_val;
     pixel_val = vec3(0,0,0); //One or all can do this, doesn't matter
     __syncthreads();
 
