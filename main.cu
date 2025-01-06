@@ -14,7 +14,7 @@
 #define ny 800
 #define tx 1
 #define ty 1
-#define tz 50
+#define tz 32
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
@@ -75,7 +75,7 @@ __global__ void render_init(curandState *rand_state, int ns) {
     // curand_init(1984, pixel_index, 0, &rand_state[pixel_index]);
     // BUGFIX, see Issue#2: Each thread gets different seed, same sequence for
     // performance improvement of about 2x!
-    int seed = 1984 + pixel_index * 1000000 + sample * 10000000000;
+    int seed = 1984 + pixel_index * 1000000 + sample * 100000;
     curand_init(seed, 0, 0,&rand_state[pixel_index * ns + sample]);
 }
 
@@ -100,8 +100,8 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
     float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
     ray r = (*cam)->get_ray(u, v, &local_rand_state);
-    pixel_val += color(r, world, &local_rand_state);
-    //pixel_val = block_reduce.Sum(color(r, world, &local_rand_state));
+    //pixel_val += color(r, world, &local_rand_state);
+    pixel_val = block_reduce.Sum(color(r, world, &local_rand_state));
 
     //Add cols from different blocks together in global variable
 
@@ -252,8 +252,9 @@ int main(int argc, char **argv) {
         std::cerr << blocks.x << " | " << blocks.y << " | " << blocks.z << std::endl;
     }
 
-    int smemSize = sizeof(vec3) * threads.y * threads.x;
-    render<<<blocks, threads, smemSize>>>(fb, d_camera, d_world, d_rand_state, ns);
+    clock_t start2, stop2;
+    start2 = clock();
+    render<<<blocks, threads>>>(fb, d_camera, d_world, d_rand_state, ns);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -262,6 +263,10 @@ int main(int argc, char **argv) {
     process_pixels<<<blocks, threads>>>(fb, ns);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
+
+    stop2 = clock();
+    double timer_seconds2 = ((double)(stop2 - start2)) / CLOCKS_PER_SEC;
+    std::cerr << "rendering took " << timer_seconds2 << " seconds.\n";
 
     stop = clock();
     double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
