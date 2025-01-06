@@ -94,16 +94,11 @@ __global__ void render(vec3 *fb, camera **cam, hitable **world, curandState *ran
     __shared__ TempStorage temp_storage;
     BlockReduce block_reduce{temp_storage};
 
-    vec3 pixel_val;
-    pixel_val = vec3(0,0,0); //One or all can do this, doesn't matter
-    __syncthreads();
-
-
     float u = float(i + curand_uniform(&local_rand_state)) / float(nx);
     float v = float(j + curand_uniform(&local_rand_state)) / float(ny);
     ray r = (*cam)->get_ray(u, v, &local_rand_state);
     //pixel_val += color(r, world, &local_rand_state);
-    pixel_val = block_reduce.Sum(color(r, world, &local_rand_state));
+    vec3 pixel_val = block_reduce.Sum(color(r, world, &local_rand_state));
 
     //Add cols from different blocks together in global variable
 
