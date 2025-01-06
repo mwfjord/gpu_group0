@@ -11,9 +11,9 @@
 
 #define nx 1200
 #define ny 800
-#define tx 4
-#define ty 4
-#define tz 16
+#define tx 8
+#define ty 8
+#define tz 8
 
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
