@@ -118,7 +118,6 @@ int main(int argc, char **argv) {
         }
     }
 
-
     // create reference for image
     vec3 *image = new vec3[nx * ny];
 
@@ -151,7 +150,7 @@ int main(int argc, char **argv) {
     cudaMalloc((void**)&d_v1, 3 * sizeof(float));
     cudaMalloc((void**)&d_v2, 3 * sizeof(float));
 
-
+    // run cublas raytrace
     raytrace(nx, ny, ns, world, cam, handle, d_v1, d_v2, image);
 
     // stop timer to get time

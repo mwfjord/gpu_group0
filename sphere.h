@@ -15,6 +15,7 @@ class sphere: public hitable  {
 
 bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec, cublasHandle_t handle, float* d_v1, float* d_v2) const {
     vec3 oc = r.origin() - center;
+    // off-load the dot product to the GPU
     float a = dot(r.direction(), r.direction(), handle, d_v1, d_v2);
     float b = dot(oc, r.direction(), handle, d_v1, d_v2);
     float c = dot(oc, oc, handle, d_v1, d_v2) - radius*radius;

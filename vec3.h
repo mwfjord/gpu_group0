@@ -87,12 +87,14 @@ inline float dot(const vec3 &v1, const vec3 &v2) {
     return v1.e[0] *v2.e[0] + v1.e[1] *v2.e[1]  + v1.e[2] *v2.e[2];
 }
 
+// create overloaded dot function for GPU
 inline float dot(const vec3 &v1, const vec3 &v2, cublasHandle_t handle, float* d_v1, float* d_v2) {
     float result;
 
+    // copy vectors to device
     cudaMemcpy(d_v1, v1.e, 3 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_v2, v2.e, 3 * sizeof(float), cudaMemcpyHostToDevice);
-
+    // run dot
     cublasSdot(handle, 3, d_v1, 1, d_v2, 1, &result);
 
     return result;
